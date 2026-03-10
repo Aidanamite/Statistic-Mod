@@ -25,6 +25,7 @@ namespace StatisticMod
     public class Main : Mod
     {
         Harmony harmony;
+        public static Main instance;
         public static List<Object> created = new List<Object>();
         public static CanvasHelper canvas => ComponentManager<CanvasHelper>.Value;
         public static Text textBase => canvas.dropText;
@@ -32,9 +33,6 @@ namespace StatisticMod
         public static Sprite compass;
         public static float playerHealthUpdateTime = 0;
         public static List<float> sharkTime = new List<float>();
-        public const int ModUtils_Channel = 127;
-        public const Messages MessageId = (Messages)5004;
-        public const int healthCall = 0;
         public static Transform equipDisplay;
         public static bool updatePlayerHealth
         {
@@ -139,6 +137,7 @@ namespace StatisticMod
         public static HashSet<string> exclusions = new HashSet<string>();
         public void Start()
         {
+            instance = this;
             modInfo = modlistEntry.jsonmodinfo;
             try
             {
@@ -190,28 +189,17 @@ namespace StatisticMod
             return t;
         }
 
-        bool ModUtils_MessageRecieved(CSteamID steamID, NetworkChannel channel, Message message)
+        public override bool OnNetworkMessage(object message, Network_UserId from, string modslug)
         {
-            object[] values;
-            if (message.Type == MessageId && (values = ModUtils_GetGenericMessageValues(message, false)) != null)
-                switch (ModUtils_GetGenericMessageId(message))
-                {
-                    case healthCall:
-                        Network_Player remotePlayer = ComponentManager<Raft_Network>.Value.GetPlayerFromID(steamID);
-                        if (remotePlayer)
-                            remotePlayer.Stats.stat_health.Value = (float)values[0];
-                        return true;
-                    default:
-                        break;
-                }
+            if (message is float f && modslug == slug)
+            {
+                Network_Player remotePlayer = ComponentManager<Raft_Network>.Value.GetPlayerFromID(from);
+                if (remotePlayer)
+                    remotePlayer.Stats.stat_health.Value = f;
+                return true;
+            }
             return false;
         }
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static object[] ModUtils_GetGenericMessageValues(Message message, bool logErrors) => null;
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static int ModUtils_GetGenericMessageId(Message message) => 0;
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static Message ModUtils_CreateGenericMessage(Messages type, int subType, params object[] values) => null;
 
         public void OnModUnload()
         {
@@ -219,7 +207,6 @@ namespace StatisticMod
             foreach (var o in created)
                 if (o)
                     Destroy(o);
-            WorldEvent_WorldUnloaded();
             Log("Mod has been unloaded!");
         }
 
@@ -931,25 +918,6 @@ namespace StatisticMod
         }
 
         public static bool IsSearching(this AI_StateMachine_Shark shark) => shark.SearchBlockInterval - Traverse.Create(shark).Field("searchBlockProgress").GetValue<float>() <= 10;
-
-        public static bool Contains(this Enum e, Enum flag)
-        {
-            if (flag.Equals(Enum.ToObject(flag.GetType(), 0)))
-                return false;
-            var a = e as IConvertible;
-            var b = flag as IConvertible;
-            try
-            {
-                var c = b.ToInt64(CultureInfo.InvariantCulture);
-                return (a.ToInt64(CultureInfo.InvariantCulture) & c) == c;
-            } catch { }
-            try
-            {
-                var c = b.ToUInt64(CultureInfo.InvariantCulture);
-                return (a.ToUInt64(CultureInfo.InvariantCulture) & c) == c;
-            } catch { }
-            return false;
-        }
     }
 
     [HarmonyPatch(typeof(Battery), "OnIsRayed")]
@@ -1081,15 +1049,7 @@ namespace StatisticMod
                 if (player != null)
                 {
                     if (Main.updatePlayerHealth)
-                    {
-                        var msg = Main.ModUtils_CreateGenericMessage(Main.MessageId, Main.healthCall, player.Stats.stat_health.Value + player.Stats.stat_BonusHealth.Value);
-                        if (msg == null)
-                            Debug.LogWarning($"[{Main.modInfo.name}]: Could not send health data to connected clients, you're probably missing the ModUtils mod");
-                        else
-                            foreach (KeyValuePair<CSteamID, Network_Player> pair in player.Network.remoteUsers.ToArray())
-                                if (!pair.Value.IsLocalPlayer)
-                                    RAPI.SendNetworkMessage(msg, Main.ModUtils_Channel);
-                    }
+                        Main.instance.SendNetworkMessage(player.Stats.stat_health.Value + player.Stats.stat_BonusHealth.Value);
                 }
             }
             catch (Exception e)
@@ -1798,7 +1758,7 @@ namespace StatisticMod
 
     public class SharkIndicator : MonoBehaviour
     {
-        Memory<SharkIndicator, bool> active = new Memory<SharkIndicator, bool>(x => Main.sharkMode != SharkMode.None && x.shark.biteRaftState && Main.sharkMode.Contains(x.currentMode) && CanvasHelper.ActiveMenu != MenuType.Inventory);
+        Memory<SharkIndicator, bool> active = new Memory<SharkIndicator, bool>(x => Main.sharkMode != SharkMode.None && x.shark.biteRaftState && Main.sharkMode.HasFlag(x.currentMode) && CanvasHelper.ActiveMenu != MenuType.Inventory);
         Memory<SharkIndicator, bool> activeSecond = new Memory<SharkIndicator, bool>(x => Main.sharkAlertScreen || x.text.transform.position.z >= 0);
         Memory<SharkIndicator, Vector3> position = new Memory<SharkIndicator, Vector3>(x =>
         {
