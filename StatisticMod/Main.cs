@@ -77,22 +77,24 @@ namespace StatisticMod
         static List<string> objectiveNames = new string[] { "Build Reciever", "Radio Tower", "Cruise Ship", "Balboa Island", "Caravan Town", "Tangaroa", "Varuna Point", "Temperance", "Utopia" }.ToList();
         static Dictionary<string, StatManager> boolSettings = new Dictionary<string, StatManager>
         {
-            { "weather", new StatManager ("Weather is ", setWeatherVisible) },
-            { "weathertimer", new StatManager ("Weather timer is ", setWeatherTimer) },
-            { "sharktimer", new StatManager ("Shark respawn timer is ", setSharkTimer) },
-            { "fullhealth", new StatManager ("Full health bars are ", setFullBars) },
-            { "objective", new StatManager ("Story objective is ", setShowObjective) },
-            { "uses", new StatManager ("Remaining item uses are ", setShowUses) },
-            { "equipment", new StatManager ("Equipment is ", setHUDEquip) },
-            { "weight", new StatManager ("Raft foundation count is ", setShowWeight) },
-            { "speed", new StatManager ("Speed display is ", setShowSpeed) },
-            { "itemids", new StatManager ("Item IDs are ", setShowIds) },
-            { "raftcenter", new StatManager ("Raft's center is ", setShowCenter) },
-            { "compass", new StatManager ("Compass is ", setShowCompass) },
-            { "sharkattack", new StatManager ("Shark attack alert is ", setSharkAttack) },
-            { "sharkcharge", new StatManager ("Shark charge alert is ", setSharkCharge) },
-            { "sharksearch", new StatManager ("Shark search alert is ", setSharkSearch) },
-            { "sharkalertfollow", new StatManager ("Shark alert is ", setSharkAlertFollow, "now locked on screen", "already locked on screen","no longer locked on screen", "already unlocked from the screen") }
+            { "weather", new StatManager ("Weather is ", nameof(showWeather)) },
+            { "weathertimer", new StatManager ("Weather timer is ", nameof(showWeatherTimer)) },
+            { "sharktimer", new StatManager ("Shark respawn timer is ", nameof(showSharkRespawn)) },
+            { "fullhealth", new StatManager ("Full health bars are ", nameof(showFullBars)) },
+            { "objective", new StatManager ("Story objective is ", nameof(showStoryObjective)) },
+            { "uses", new StatManager ("Remaining item uses are ", nameof(showDurability)) },
+            { "equipment", new StatManager ("Equipment is ", nameof(showHUDEquipment)) },
+            { "weight", new StatManager ("Raft foundation count is ", nameof(showFoundations)) },
+            { "speed", new StatManager ("Speed display is ", nameof(showSpeed)) },
+            { "itemids", new StatManager ("Item IDs are ", nameof(showItemIds)) },
+            { "raftcenter", new StatManager ("Raft's center is ", nameof(showCenter)) },
+            { "compass", new StatManager ("Compass is ", nameof(showCompass)) },
+            { "cropgrowth", new StatManager ("Crop growth percentage is ", nameof(showCropGrowth)) },
+            { "battery", new StatManager ("Battery charge percentage is ", nameof(showBattery)) },
+            { "sharkattack", new StatManager ("Shark attack alert is ", nameof(sharkModeAttacking)) },
+            { "sharkcharge", new StatManager ("Shark charge alert is ", nameof(sharkModeCharging)) },
+            { "sharksearch", new StatManager ("Shark search alert is ", nameof(sharkModeSearching)) },
+            { "sharkalertfollow", new StatManager ("Shark alert is ", nameof(sharkAlertScreen), "now locked on screen", "already locked on screen","no longer locked on screen", "already unlocked from the screen") }
         };
         static Clock clockCache;
         public static bool timeIsClock
@@ -121,20 +123,53 @@ namespace StatisticMod
         public static bool showDurability = true;
         public static bool showFoundations = true;
         public static bool showCenter = false;
-        public static Color32 center = new Color32(0,255,0,255);
+        public static Color32 centerC = new Color32(0,255,0,255);
+        public static int center { get => GetHue(centerC); set => centerC = GetColor(value); }
         public static bool showCompass = true;
         public static bool showSpeed = true;
+        public static bool showCropGrowth = true;
+        public static bool showBattery = true;
         public static SharkMode sharkMode = SharkMode.WhileAttacking | SharkMode.WhileCharging;
+        public static bool sharkModeAttacking
+        {
+            get => sharkMode.HasFlag(SharkMode.WhileAttacking);
+            set
+            {
+                if (value) sharkMode |= SharkMode.WhileAttacking;
+                else sharkMode &= ~SharkMode.WhileAttacking;
+            }
+        }
+        public static bool sharkModeCharging
+        {
+            get => sharkMode.HasFlag(SharkMode.WhileCharging);
+            set
+            {
+                if (value) sharkMode |= SharkMode.WhileCharging;
+                else sharkMode &= ~SharkMode.WhileCharging;
+            }
+        }
+        public static bool sharkModeSearching
+        {
+            get => sharkMode.HasFlag(SharkMode.WhileSearching);
+            set
+            {
+                if (value) sharkMode |= SharkMode.WhileSearching;
+                else sharkMode &= ~SharkMode.WhileSearching;
+            }
+        }
         public static bool sharkAlertScreen = false;
-        public static Color32 attacking = new Color32(255, 0, 0, 255);
-        public static Color32 charging = new Color32(255, 255, 0, 255);
-        public static Color32 searching = new Color32(0, 255, 0, 255);
+        public static Color32 attackingC = new Color32(255, 0, 0, 255);
+        public static int attacking { get => GetHue(attackingC); set => attackingC = GetColor(value); }
+        public static Color32 chargingC = new Color32(255, 255, 0, 255);
+        public static int charging { get => GetHue(chargingC); set => chargingC = GetColor(value); }
+        public static Color32 searchingC = new Color32(0, 255, 0, 255);
+        public static int searching { get => GetHue(searchingC); set => searchingC = GetColor(value); }
         public static float barDrawDistance = 10;
-        public static float HUDPositionX = 50;
-        public static float HUDPositionY = 50;
+        public static float HUDPositionX = 50 / 1200;
+        public static float HUDPositionY = 50 / 1200;
         public static bool showItemIds = false;
 
-        public static HashSet<string> exclusions = new HashSet<string>();
+        public static Dictionary<string,string> exclusions = new Dictionary<string, string>();
         public void Start()
         {
             instance = this;
@@ -158,10 +193,10 @@ namespace StatisticMod
                         Patch_PlayerEquipment.Equip(player.PlayerEquipment, slot.itemInstance, slot);
                 foreach (var entity in Resources.FindObjectsOfTypeAll<Network_Entity>())
                     if (entity.Network)
-                        Patch_NetworkEntity.Start(entity);
+                            Patch_NetworkEntity.Start(entity);
             }
             foreach (var inv in Resources.FindObjectsOfTypeAll<Inventory>())
-                if (Traverse.Create(inv).Field("canvas").GetValue<CanvasHelper>())
+                if (inv.canvas)
                     Patch_Inventory.Start(inv);
             foreach (var shark in Resources.FindObjectsOfTypeAll<AI_StateMachine_Shark>())
                 if (shark.network)
@@ -275,7 +310,6 @@ namespace StatisticMod
             if (ind >= 0)
             {
                 clockSetting = ind;
-                ResaveValues();
                 if (ind == 3)
                     return "Time display is now automatic";
                 return "Time display is now " + (ind > 0 ? "a " : "") + ToTitle(args[0]);
@@ -298,7 +332,6 @@ namespace StatisticMod
                 if (statSetting == v)
                     return "Setting is unchanged";
                 statSetting = v;
-                ResaveValues();
                 if (ind == 0)
                     return "Stat numbers are no longer shown";
                 return "Stat numbers are now set to " + (ind == 2 ? "un" : "") + "rounded";
@@ -380,7 +413,6 @@ namespace StatisticMod
             try
             {
                 barDrawDistance = float.Parse(args[0]);
-                ResaveValues();
                 return "Can now see health bars from " + args[0];
             }
             catch
@@ -401,7 +433,6 @@ namespace StatisticMod
                 float tmp = float.Parse(args[1]);
                 HUDPositionX = float.Parse(args[0]);
                 HUDPositionY = tmp;
-                ResaveValues();
                 return "HUD has been moved";
             }
             catch
@@ -413,9 +444,8 @@ namespace StatisticMod
         [ConsoleCommand(name: "setHUDToMouse", docs: "Sets the location, of the extra HUD information, on the screen to the location of the mouse")]
         public static string MyCommand9(string[] args)
         {
-            HUDPositionX = Input.mousePosition.x / aspectRatio;
-            HUDPositionY = canvas.GetComponent<RectTransform>().sizeDelta.y - Input.mousePosition.y;
-            ResaveValues();
+            HUDPositionX = Input.mousePosition.x / aspectRatio / 1200;
+            HUDPositionY = (canvas.GetComponent<RectTransform>().sizeDelta.y - Input.mousePosition.y) / 1200;
             return "HUD has been moved";
         }
 
@@ -428,9 +458,8 @@ namespace StatisticMod
                 return "Too many arguments";
             try
             {
-                attacking = GetColor(int.Parse(args[0]));
-                ResaveValues();
-                return $"Attacking color set to <color=#{attacking.GetHex()}>ALERT</color>";
+                attacking = int.Parse(args[0]);
+                return $"Attacking color set to <color=#{attackingC.GetHex()}>ALERT</color>";
             }
             catch
             {
@@ -447,9 +476,8 @@ namespace StatisticMod
                 return "Too many arguments";
             try
             {
-                charging = GetColor(int.Parse(args[0]));
-                ResaveValues();
-                return $"Charging color set to <color=#{charging.GetHex()}>ALERT</color>";
+                charging = int.Parse(args[0]);
+                return $"Charging color set to <color=#{chargingC.GetHex()}>ALERT</color>";
             }
             catch
             {
@@ -466,9 +494,8 @@ namespace StatisticMod
                 return "Too many arguments";
             try
             {
-                searching = GetColor(int.Parse(args[0]));
-                ResaveValues();
-                return $"Searching color set to <color=#{searching.GetHex()}>ALERT</color>";
+                searching = int.Parse(args[0]);
+                return $"Searching color set to <color=#{searchingC.GetHex()}>ALERT</color>";
             }
             catch
             {
@@ -485,9 +512,8 @@ namespace StatisticMod
                 return "Too many arguments";
             try
             {
-                center = GetColor(int.Parse(args[0]));
-                ResaveValues();
-                return $"Searching color set to <color=#{center.GetHex()}>ALERT</color>";
+                center = int.Parse(args[0]);
+                return $"Searching color set to <color=#{centerC.GetHex()}>ALERT</color>";
             }
             catch
             {
@@ -512,171 +538,11 @@ namespace StatisticMod
             dmgObject.SetActiveSafe(true);
         }
 
-        public static bool hasExclusion(string name) => exclusions.Contains(name);
+        public static bool hasExclusion(string name) => exclusions.ContainsKey(name);
 
-        static bool addExclusion(string name)
-        {
-            if (exclusions.Add(name))
-            {
-                ExtraSettingsAPI_SetDataValue("exclusions", name, "");
-                return true;
-            }
-            return false;
-        }
+        static bool addExclusion(string name) => exclusions.TryAdd(name,"");
 
-        static bool removeExclusion(string name)
-        {
-            if (exclusions.Remove(name))
-            {
-                ResaveValues();
-                return true;
-            }
-            return false;
-        }
-
-        static bool setFullBars(bool visible)
-        {
-            if (showFullBars == visible)
-                return false;
-            showFullBars = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setWeatherVisible(bool visible)
-        {
-            if (showWeather == visible)
-                return false;
-            showWeather = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setWeatherTimer(bool visible)
-        {
-            if (showWeatherTimer == visible)
-                return false;
-            showWeatherTimer = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setSharkTimer(bool visible)
-        {
-            if (showSharkRespawn == visible)
-                return false;
-            showSharkRespawn = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setShowObjective(bool visible)
-        {
-            if (showStoryObjective == visible)
-                return false;
-            showStoryObjective = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setShowUses(bool visible)
-        {
-            if (showDurability == visible)
-                return false;
-            showDurability = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setHUDEquip(bool visible)
-        {
-            if (showHUDEquipment == visible)
-                return false;
-            showHUDEquipment = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setShowWeight(bool visible)
-        {
-            if (showFoundations == visible)
-                return false;
-            showFoundations = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setShowSpeed(bool visible)
-        {
-            if (showSpeed == visible)
-                return false;
-            showSpeed = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setShowIds(bool visible)
-        {
-            if (showItemIds == visible)
-                return false;
-            showItemIds = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setShowCenter(bool visible)
-        {
-            if (showCenter == visible)
-                return false;
-            showCenter = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setShowCompass(bool visible)
-        {
-            if (showCompass == visible)
-                return false;
-            showCompass = visible;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setSharkAttack(bool visible)
-        {
-            if (sharkMode.HasFlag(SharkMode.WhileAttacking) == visible)
-                return false;
-            sharkMode ^= SharkMode.WhileAttacking;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setSharkCharge(bool visible)
-        {
-            if (sharkMode.HasFlag(SharkMode.WhileCharging) == visible)
-                return false;
-            sharkMode ^= SharkMode.WhileCharging;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setSharkSearch(bool visible)
-        {
-            if (sharkMode.HasFlag(SharkMode.WhileSearching) == visible)
-                return false;
-            sharkMode ^= SharkMode.WhileSearching;
-            ResaveValues();
-            return true;
-        }
-
-        static bool setSharkAlertFollow(bool visible)
-        {
-            if (sharkAlertScreen == visible)
-                return false;
-            sharkAlertScreen = visible;
-            ResaveValues();
-            return true;
-        }
+        static bool removeExclusion(string name) => exclusions.Remove(name);
 
         public static string getNextStoryLocation()
         {
@@ -692,97 +558,6 @@ namespace StatisticMod
             return objectiveNames[ind + 1];
         }
 
-        public static void ResaveValues()
-        {
-            ExtraSettingsAPI_SetComboboxSelectedIndex("Clock Mode", clockSetting);
-            ExtraSettingsAPI_SetComboboxSelectedIndex("Stat Numbers", (int)statSetting);
-            ExtraSettingsAPI_SetCheckboxState("Weather Display", showWeather);
-            ExtraSettingsAPI_SetCheckboxState("Weather Timer", showWeatherTimer);
-            ExtraSettingsAPI_SetCheckboxState("Shark Respawn Timer", showSharkRespawn);
-            ExtraSettingsAPI_SetCheckboxState("Full Health Bars", showFullBars);
-            ExtraSettingsAPI_SetCheckboxState("Story Objective", showStoryObjective);
-            ExtraSettingsAPI_SetCheckboxState("Item Durability", showDurability);
-            ExtraSettingsAPI_SetCheckboxState("Equipment Display", showHUDEquipment);
-            ExtraSettingsAPI_SetCheckboxState("Raft Weight", showFoundations);
-            ExtraSettingsAPI_SetCheckboxState("Compass", showCompass);
-            ExtraSettingsAPI_SetCheckboxState("Speed Display", showSpeed);
-            ExtraSettingsAPI_SetCheckboxState("Item IDs", showItemIds);
-            ExtraSettingsAPI_SetCheckboxState("Raft Center", showCenter);
-            ExtraSettingsAPI_SetSliderValue("Raft Center Color", GetHue(center));
-            ExtraSettingsAPI_SetSliderValue("Health Bar Max Draw Distance", barDrawDistance);
-            ExtraSettingsAPI_SetSliderValue("HUD X Offset", HUDPositionX / 1200);
-            ExtraSettingsAPI_SetSliderValue("HUD Y Offset", HUDPositionY / 1200);
-            ExtraSettingsAPI_SetCheckboxState("While Attacking Raft", sharkMode.HasFlag(SharkMode.WhileAttacking));
-            ExtraSettingsAPI_SetCheckboxState("While Charging Raft", sharkMode.HasFlag(SharkMode.WhileCharging));
-            ExtraSettingsAPI_SetCheckboxState("While Searching", sharkMode.HasFlag(SharkMode.WhileSearching));
-            ExtraSettingsAPI_SetSliderValue("Attacking Color", GetHue(attacking));
-            ExtraSettingsAPI_SetSliderValue("Charging Color", GetHue(charging));
-            ExtraSettingsAPI_SetSliderValue("Searching Color", GetHue(searching));
-            ExtraSettingsAPI_SetCheckboxState("Alert Never Out of View", sharkAlertScreen);
-            ExtraSettingsAPI_SetDataValues("exclusions", exclusions.ToDictionary(x => ""));
-        }
-
-        public void ExtraSettingsAPI_Load() => ExtraSettingsAPI_SettingsClose();
-
-        public void ExtraSettingsAPI_SettingsClose()
-        {
-            clockSetting = ExtraSettingsAPI_GetComboboxSelectedIndex("Clock Mode");
-            statSetting = (StatMode)ExtraSettingsAPI_GetComboboxSelectedIndex("Stat Numbers");
-            showWeather = ExtraSettingsAPI_GetCheckboxState("Weather Display");
-            showWeatherTimer = ExtraSettingsAPI_GetCheckboxState("Weather Timer");
-            showSharkRespawn = ExtraSettingsAPI_GetCheckboxState("Shark Respawn Timer");
-            showFullBars = ExtraSettingsAPI_GetCheckboxState("Full Health Bars");
-            showStoryObjective = ExtraSettingsAPI_GetCheckboxState("Story Objective");
-            showDurability = ExtraSettingsAPI_GetCheckboxState("Item Durability");
-            showHUDEquipment = ExtraSettingsAPI_GetCheckboxState("Equipment Display");
-            showFoundations = ExtraSettingsAPI_GetCheckboxState("Raft Weight");
-            showSpeed = ExtraSettingsAPI_GetCheckboxState("Speed Display");
-            showItemIds = ExtraSettingsAPI_GetCheckboxState("Item IDs");
-            showCenter = ExtraSettingsAPI_GetCheckboxState("Raft Center");
-            center = GetColor(Mathf.RoundToInt(ExtraSettingsAPI_GetSliderValue("Raft Center Color")));
-            showCompass = ExtraSettingsAPI_GetCheckboxState("Compass");
-            barDrawDistance = ExtraSettingsAPI_GetSliderValue("Health Bar Max Draw Distance");
-            HUDPositionX = 1200 * ExtraSettingsAPI_GetSliderRealValue("HUD X Offset");
-            HUDPositionY = 1200 * ExtraSettingsAPI_GetSliderRealValue("HUD Y Offset");
-            sharkMode = SharkMode.None;
-            if (ExtraSettingsAPI_GetCheckboxState("While Attacking Raft"))
-                sharkMode |= SharkMode.WhileAttacking;
-            if (ExtraSettingsAPI_GetCheckboxState("While Charging Raft"))
-                sharkMode |= SharkMode.WhileCharging;
-            if (ExtraSettingsAPI_GetCheckboxState("While Searching"))
-                sharkMode |= SharkMode.WhileSearching;
-            attacking = GetColor(Mathf.RoundToInt(ExtraSettingsAPI_GetSliderValue("Attacking Color")));
-            charging = GetColor(Mathf.RoundToInt(ExtraSettingsAPI_GetSliderValue("Charging Color")));
-            searching = GetColor(Mathf.RoundToInt(ExtraSettingsAPI_GetSliderValue("Searching Color")));
-            sharkAlertScreen = ExtraSettingsAPI_GetCheckboxState("Alert Never Out of View");
-            exclusions = (ExtraSettingsAPI_GetDataNames("exclusions") ?? new string[0]).ToHashSet();
-        }
-
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static int ExtraSettingsAPI_GetComboboxSelectedIndex(string SettingName) => -1;
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static string ExtraSettingsAPI_GetComboboxSelectedItem(string SettingName) => "";
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static bool ExtraSettingsAPI_GetCheckboxState(string SettingName) => false;
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static float ExtraSettingsAPI_GetSliderValue(string SettingName) => 0;
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static float ExtraSettingsAPI_GetSliderRealValue(string SettingName) => 0;
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void ExtraSettingsAPI_SetComboboxSelectedIndex(string SettingName, int value) { }
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void ExtraSettingsAPI_SetComboboxSelectedItem(string SettingName, string value) { }
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void ExtraSettingsAPI_SetCheckboxState(string SettingName, bool value) { }
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void ExtraSettingsAPI_SetSliderValue(string SettingName, float value) { }
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static string[] ExtraSettingsAPI_GetDataNames(string settingName) => new string[0];
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void ExtraSettingsAPI_SetDataValue(string settingName, string subname, string value) { }
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void ExtraSettingsAPI_SetDataValues(string settingName, Dictionary<string, string> values) { }
 
         static Color32 GetColor(int hue)
         {
@@ -812,9 +587,11 @@ namespace StatisticMod
                         return color.g;
                     return 510 - color.r;
                 }
-                if (color.b < color.r)
-                    return 1020 + color.b;
-                return 1530 - color.r;
+                if (color.b == 0)
+                    return 0;
+                if (color.r < color.b)
+                    return 1020 + color.r;
+                return 1530 - color.b;
             }
             if (color.b < color.g)
                 return 510 + color.b;
@@ -917,7 +694,7 @@ namespace StatisticMod
             return color;
         }
 
-        public static bool IsSearching(this AI_StateMachine_Shark shark) => shark.SearchBlockInterval - Traverse.Create(shark).Field("searchBlockProgress").GetValue<float>() <= 10;
+        public static bool IsSearching(this AI_StateMachine_Shark shark) => shark.SearchBlockInterval - shark.searchBlockProgress <= 10;
     }
 
     [HarmonyPatch(typeof(Battery), "OnIsRayed")]
@@ -926,7 +703,8 @@ namespace StatisticMod
         public static Battery batteryInstance;
         static void Prefix(Battery __instance)
         {
-            batteryInstance = __instance;
+            if (Main.showBattery)
+                batteryInstance = __instance;
         }
         static void Postfix()
         {
@@ -934,7 +712,7 @@ namespace StatisticMod
         }
     }
 
-    [HarmonyPatch(typeof(DisplayTextManager), "ShowText", new Type[] { typeof(string), typeof(KeyCode), typeof(int), typeof(int), typeof(bool) })]
+    [HarmonyPatch(typeof(DisplayTextManager), "ShowText", new Type[] { typeof(string), typeof(string), typeof(KeyCode), typeof(int), typeof(int), typeof(bool) })]
     public class Patch_BatteryDisplayText
     {
         static void Prefix(ref string text)
@@ -950,7 +728,7 @@ namespace StatisticMod
         static bool shown = false;
         static void Postfix(Pickup __instance)
         {
-            if (Helper.HitAtCursor(out var raycastHit, Player.UseDistance, LayerMasks.MASK_Item | LayerMasks.MASK_RaycastInteractable))
+            if (Main.showCropGrowth && Helper.HitAtCursor(out var raycastHit, Player.UseDistance, LayerMasks.MASK_Item | LayerMasks.MASK_RaycastInteractable))
             {
                 Plant crop = raycastHit.transform.GetComponentInParent<Plant>();
                 if (crop)
@@ -981,7 +759,7 @@ namespace StatisticMod
                 }
                 return;
             }
-            var growTime = Mathf.FloorToInt(target.GetGrowTimer() / Traverse.Create(target).Field("growTimeSec").GetValue<float>() * 100);
+            var growTime = Mathf.FloorToInt(target.GetGrowTimer() / target.growTimeSec * 100);
             if (growTime < 100)
             {
                 shown = true;
@@ -1066,7 +844,7 @@ namespace StatisticMod
         [HarmonyPostfix]
         public static void Equip(PlayerEquipment __instance, ItemInstance item, Slot_Equip slot)
         {
-            Network_Player player = Traverse.Create(__instance).Field("playerNetwork").GetValue<Network_Player>();
+            Network_Player player = __instance.playerNetwork;
             if (item.BaseItemMaxUses > 1)
                 HUDEquipmentDisplay.Create(Main.equipDisplay, slot, player.Inventory.slotPrefab, new Vector2(10, 200), player.Inventory.gridLayoutGroup.cellSize);
 
@@ -1080,7 +858,7 @@ namespace StatisticMod
         [HarmonyPostfix]
         public static void Start(Network_Entity __instance)
         {
-            if (Traverse.Create(__instance as PlayerStats).Field("playerNetwork").GetValue<Network_Player>()?.IsLocalPlayer ?? false)
+            if (__instance is PlayerStats stats && stats.playerNetwork && stats.playerNetwork.IsLocalPlayer)
                 return;
             HealthBar.Create(__instance);
         }
@@ -1122,7 +900,7 @@ namespace StatisticMod
                     if ((item.settings_buildable?.HasBuildablePrefabs ?? false) && item.settings_buildable.GetBlockPrefab(0)?.GetComponent<CookingTable_Recipe_UI>())
                         str += item.settings_buildable.GetBlockPrefab(0).GetComponent<CookingTable_Recipe_UI>().Recipe.Result.GetFoodValues();
                     if (weapon != null)
-                        str += weapon != null ? "\nDamage: " + Traverse.Create(weapon).Field("damage").GetValue<int>().ToString() : "";
+                        str += weapon != null ? "\nDamage: " + weapon.damage.ToString() : "";
                     if (str.Length != 0)
                         __result += "\n" + str;
                     break;
@@ -1454,8 +1232,8 @@ namespace StatisticMod
             r.anchorMin = Vector2.zero;
             o.text = Main.CreateText(o.transform, -500 * Main.aspectRatio, 350, "\nIf you can see this something has gone wrong", Main.textBase.fontSize, Main.textBase.color, 400, 300, Main.textBase.font, "HUD Text").GetComponent<Text>();
             Main.CopyTextShadow(o.text.gameObject, Main.textBase.gameObject);
-            o.text.rectTransform.offsetMax = Vector2.zero;
-            o.text.rectTransform.offsetMin = Vector2.zero;
+            o.text.rectTransform.offsetMax = new Vector2(400,0);
+            o.text.rectTransform.offsetMin = new Vector2(0, -300);
             o.text.rectTransform.anchorMax = new Vector2(0, 1);
             o.text.rectTransform.anchorMin = new Vector2(0, 1);
             try { TimeBar.Create(o.text.gameObject, Main.textBase.font.lineHeight, 50, 25); } catch (Exception e) { Debug.LogError(e); }
@@ -1468,7 +1246,7 @@ namespace StatisticMod
         Memory<Vector3?> position = new Memory<Vector3?>(() => RAPI.GetLocalPlayer()?.transform.position);
         float speed;
         Text text;
-        Memory<(float x, float y, float r)> offset = new Memory<(float, float, float)>(() => (Main.HUDPositionX, Main.HUDPositionY, Main.aspectRatio));
+        Memory<(float x, float y)> offset = new Memory<(float, float)>(() => (Main.HUDPositionX, Main.HUDPositionY));
         Memory<HUDText, (int, UniqueWeatherType?, float?, float?, int?, int, string)> changes = new Memory<HUDText, (int, UniqueWeatherType?, float?, float?, int?, int, string)>(x => 
         (
             Main.timeIsClock ? Main.clockSetting : -Main.clockSetting,
@@ -1504,8 +1282,8 @@ namespace StatisticMod
             {
                 if (offset.GetValue(out var off))
                 {
-                    text.rectTransform.offsetMin = new Vector2(off.x * off.r, -off.y - 300);
-                    text.rectTransform.offsetMax = new Vector2(off.x * off.r + 400, -off.y);
+                    text.rectTransform.anchorMin = new Vector2(off.x, 1 - off.y);
+                    text.rectTransform.anchorMax = new Vector2(off.x, 1 - off.y);
                 }
                 if (changes.GetValue(this, out _))
                 {
@@ -1758,7 +1536,7 @@ namespace StatisticMod
 
     public class SharkIndicator : MonoBehaviour
     {
-        Memory<SharkIndicator, bool> active = new Memory<SharkIndicator, bool>(x => Main.sharkMode != SharkMode.None && x.shark.biteRaftState && Main.sharkMode.HasFlag(x.currentMode) && CanvasHelper.ActiveMenu != MenuType.Inventory);
+        Memory<SharkIndicator, bool> active = new Memory<SharkIndicator, bool>(x => Main.sharkMode != SharkMode.None && x.currentMode != SharkMode.None && x.shark.biteRaftState && Main.sharkMode.HasFlag(x.currentMode) && CanvasHelper.ActiveMenu != MenuType.Inventory);
         Memory<SharkIndicator, bool> activeSecond = new Memory<SharkIndicator, bool>(x => Main.sharkAlertScreen || x.text.transform.position.z >= 0);
         Memory<SharkIndicator, Vector3> position = new Memory<SharkIndicator, Vector3>(x =>
         {
@@ -1781,14 +1559,15 @@ namespace StatisticMod
         Memory<SharkIndicator, Color> color = new Memory<SharkIndicator, Color>(x =>
         {
             var a = (float)Math.Sin(x.timePassed * 5) / 4 + 0.75f;
+
             switch (x.currentMode)
             {
                 case SharkMode.WhileAttacking:
-                    return ((Color)Main.attacking).Tweak(a: a);
+                    return ((Color)Main.attackingC).Tweak(a: a);
                 case SharkMode.WhileCharging:
-                    return ((Color)Main.charging).Tweak(a: a);
+                    return ((Color)Main.chargingC).Tweak(a: a);
                 case SharkMode.WhileSearching:
-                    return ((Color)Main.searching).Tweak(a: a);
+                    return ((Color)Main.searchingC).Tweak(a: a);
                 default:
                     return Color.black;
             }
@@ -1855,7 +1634,7 @@ namespace StatisticMod
         Memory<CenterPointer, bool> active = new Memory<CenterPointer, bool>(x => Main.showCenter && CanvasHelper.ActiveMenu != MenuType.Inventory && x.text.transform.position.z > 0);
         Memory<Vector3?> position = new Memory<Vector3?>(() => Helper.MainCamera && ComponentManager<Raft>.Value ? Helper.MainCamera.WorldToScreenPoint(ComponentManager<Raft>.Value.transform.position) : default(Vector3?));
         Memory<CenterPointer, Vector2> size = new Memory<CenterPointer, Vector2>(x => new Vector2(x.text.preferredWidth, x.text.preferredHeight));
-        Memory<CenterPointer, Color> color = new Memory<CenterPointer, Color>(x => ((Color)Main.center).Tweak(a: (float)Math.Sin(x.timePassed * 5) / 4 + 0.75f));
+        Memory<CenterPointer, Color> color = new Memory<CenterPointer, Color>(x => ((Color)Main.centerC).Tweak(a: (float)Math.Sin(x.timePassed * 5) / 4 + 0.75f));
         public static CenterPointer Create()
         {
             var o = new GameObject("CenterPointer").AddComponent<CenterPointer>();
@@ -1960,19 +1739,55 @@ namespace StatisticMod
     class StatManager
     {
         string messagePrefix;
+        FieldInfo field;
+        PropertyInfo property;
         Func<bool, bool> modify;
         string nT;
         string aT;
         string nF;
         string aF;
+        public StatManager(string prefix, string member, string nowTrue = "now visible", string alreadyTrue = "already visible", string nowFalse = "now hidden", string alreadyFalse = "already hidden")
+            : this(prefix, nowTrue, nowFalse,alreadyTrue,alreadyFalse)
+        {
+            var members = typeof(Main).GetMember(member);
+            property = members.FirstOrDefault(x => x is PropertyInfo p && p.PropertyType == typeof(bool)) as PropertyInfo;
+            if (property == null)
+                field = members.FirstOrDefault(x => x is FieldInfo f && f.FieldType == typeof(bool)) as FieldInfo;
+            if (property == null && field == null)
+                throw new MissingMemberException(typeof(Main).FullName, member);
+        }
         public StatManager(string prefix, Func<bool, bool> editor, string nowTrue = "now visible", string alreadyTrue = "already visible", string nowFalse = "now hidden", string alreadyFalse = "already hidden")
+            : this(prefix, nowTrue, nowFalse, alreadyTrue, alreadyFalse)
+        {
+            modify = editor;
+        }
+        StatManager(string prefix, string nowTrue, string alreadyTrue, string nowFalse, string alreadyFalse)
         {
             messagePrefix = prefix;
-            modify = editor;
             nT = nowTrue;
             aT = alreadyTrue;
             nF = nowFalse;
             aF = alreadyFalse;
+        }
+        bool Modify(bool value)
+        {
+            if (field != null)
+            {
+                var cur = (bool)field.GetValue(Main.instance);
+                if (cur == value)
+                    return false;
+                field.SetValue(Main.instance, value);
+                return true;
+            }
+            if (property != null)
+            {
+                var cur = (bool)property.GetValue(Main.instance);
+                if (cur == value)
+                    return false;
+                property.SetValue(Main.instance, value);
+                return true;
+            }
+            return modify(value);
         }
         public string Set(bool value)
         {
