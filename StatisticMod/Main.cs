@@ -226,11 +226,11 @@ namespace StatisticMod
 
         public override bool OnNetworkMessage(object message, Network_UserId from, string modslug)
         {
-            if (message is float f && modslug == slug)
+            if (message is MyMessage f && modslug == slug)
             {
                 Network_Player remotePlayer = ComponentManager<Raft_Network>.Value.GetPlayerFromID(from);
                 if (remotePlayer)
-                    remotePlayer.Stats.stat_health.Value = f;
+                    remotePlayer.Stats.stat_health.Value = f.value;
                 return true;
             }
             return false;
@@ -827,7 +827,7 @@ namespace StatisticMod
                 if (player != null)
                 {
                     if (Main.updatePlayerHealth)
-                        Main.instance.SendNetworkMessage(player.Stats.stat_health.Value + player.Stats.stat_BonusHealth.Value);
+                        Main.instance.SendNetworkMessage(new MyMessage() { value = player.Stats.stat_health.Value + player.Stats.stat_BonusHealth.Value });
                 }
             }
             catch (Exception e)
@@ -1844,5 +1844,11 @@ namespace StatisticMod
             last = current;
             return !(current?.Equals(prev) ?? prev?.Equals(current) ?? true);
         }
+    }
+
+    [Serializable]
+    public class MyMessage
+    {
+        public float value;
     }
 }
