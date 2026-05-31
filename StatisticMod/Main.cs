@@ -635,15 +635,15 @@ namespace StatisticMod
                     + (item.settings_consumeable.BonusThirstYield != 0 ? "\nWater Bonus: " + item.settings_consumeable.BonusThirstYield.ToString() : "");
 
 
-        public static void AppendTimeString(this StringBuilder builder, float TimeOfDay, bool addZero = true)
+        public static void AppendTimeString(this StringBuilder builder, float TimeOfDay, bool addHourZero = true, bool addMinuteZero = true)
         {
             int hour = (int)TimeOfDay;
             int minute = (int)((TimeOfDay - hour) * 60);
-            if (addZero && hour < 10)
+            if (addHourZero && hour < 10)
                 builder.Append('0');
             builder.Append(hour);
             builder.Append(':');
-            if (addZero && minute < 10)
+            if (addMinuteZero && minute < 10)
                 builder.Append('0');
             builder.Append(minute);
         }
@@ -1239,6 +1239,7 @@ namespace StatisticMod
             try { TimeBar.Create(o.text.gameObject, Main.textBase.font.lineHeight, 50, 25); } catch (Exception e) { Debug.LogError(e); }
             try { Compass.Create(o.text.gameObject, 80, 400, 100); } catch (Exception e) { Debug.LogError(e); }
             o.time.GetValue(out _);
+            o.text.text = "";
             return o;
         }
         int steps;
