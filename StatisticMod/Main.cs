@@ -96,7 +96,8 @@ namespace StatisticMod
             { "sharksearch", new StatManager ("Shark search alert is ", nameof(sharkModeSearching)) },
             { "sharkalertfollow", new StatManager ("Shark alert is ", nameof(sharkAlertScreen), "now locked on screen", "already locked on screen","no longer locked on screen", "already unlocked from the screen") }
         };
-        static Clock clockCache;
+        public static int clockCount;
+        static int lastClockCount;
         public static bool timeIsClock
         {
             get
@@ -104,10 +105,9 @@ namespace StatisticMod
                 int s = clockSetting;
                 if (s == 3)
                 {
-                    if (clockCache)
-                        return true;
-                    if (ComponentManager<Raft>.Value)
-                        return clockCache = ComponentManager<Raft>.Value.GetComponentInChildren<Clock>();
+                    lastClockCount = clockCount;
+                    clockCount = 0;
+                    return lastClockCount != 0;
                 }
                 return s == 2;
             }
@@ -941,6 +941,15 @@ namespace StatisticMod
         }
     }
 
+    [HarmonyPatch(typeof(Clock), "Update")]
+    static class Patch_ClockCounter
+    {
+        public static void Postfix()
+        {
+            Main.clockCount++;
+        }
+    }
+
     [HarmonyPatch(typeof(Inventory))]
     static class Patch_Inventory
     {
@@ -1250,7 +1259,7 @@ namespace StatisticMod
         Memory<(float x, float y)> offset = new Memory<(float, float)>(() => (Main.HUDPositionX, Main.HUDPositionY));
         Memory<HUDText, (int, UniqueWeatherType?, float?, float?, int?, int, string)> changes = new Memory<HUDText, (int, UniqueWeatherType?, float?, float?, int?, int, string)>(x => 
         (
-            Main.timeIsClock ? Main.clockSetting : -Main.clockSetting,
+            Main.timeIsClock ? (int)(ComponentManager<AzureSkyController>.Value.timeOfDay.hour * 60) : -Main.clockSetting,
             Main.showWeather ? ComponentManager<WeatherManager>.Value.GetCurrentWeather().so_weather.uniqueWeatherType : default(UniqueWeatherType?),
             Main.showWeatherTimer ? ComponentManager<WeatherManager>.Value.WeatherTimer : default(float?),
             Main.showSpeed ? x.speed : default(float?),
@@ -1260,6 +1269,7 @@ namespace StatisticMod
         ));
         void Update()
         {
+            bool sharkUpdate = false;
             if (Time.deltaTime != 0)
             {
                 steps++;
@@ -1274,8 +1284,16 @@ namespace StatisticMod
                     }
                 }
                 for (var i = Main.sharkTime.Count - 1; i >= 0; i--)
-                    if ((Main.sharkTime[i] -= Time.deltaTime) <= 0)
+                {
+                    var before = Main.sharkTime[i];
+                    var after = before - Time.deltaTime;
+                    if ((int)before != (int)after)
+                        sharkUpdate = true;
+                    if (after <= 0)
                         Main.sharkTime.RemoveAt(i);
+                    else
+                        Main.sharkTime[i] = after;
+                }
             }
             WeatherManager wm = ComponentManager<WeatherManager>.Value;
             AzureSkyController sc = ComponentManager<AzureSkyController>.Value;
@@ -1286,7 +1304,7 @@ namespace StatisticMod
                     text.rectTransform.anchorMin = new Vector2(off.x, 1 - off.y);
                     text.rectTransform.anchorMax = new Vector2(off.x, 1 - off.y);
                 }
-                if (changes.GetValue(this, out _))
+                if (changes.GetValue(this, out _) || sharkUpdate)
                 {
                     var builder = new StringBuilder();
                     var line = false;
